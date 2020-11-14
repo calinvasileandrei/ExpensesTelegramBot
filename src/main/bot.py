@@ -10,12 +10,11 @@ from telegram.ext import (
     CallbackContext)
 #other imports
 import os
-from dotenv import load_dotenv
 from src.main.utils.base_logger import logger
 #my imports
 import src.main.database.db_manager as myDbManager
 
-CHOOSING, TYPING_REPLY, TYPING_CHOICE, DELETE_REPLY, UPDATE_REPLY, UPDATE_CHOOSING, UPDATE_MOFIFY = range(7)
+CHOOSING, NEW_REPLY, TYPING_CHOICE, DELETE_REPLY, UPDATE_REPLY, UPDATE_CHOOSING, UPDATE_MOFIFY = range(7)
 reply_keyboard = [
     ['New expense', 'Show expenses'],
     ['Delete expense', 'Update expense'],
@@ -42,27 +41,12 @@ def start(update: Update, context: CallbackContext) -> None:
 
     return CHOOSING
 
-def received_information(update: Update, context: CallbackContext) -> int:
-    text = update.message.text
-    logger.info("text:"+str(text))
-    logger.info("id:"+str(update.message.from_user.id))
-    event = myDbManager.createExpense(update.message.from_user.id,text)
-
-    update.message.reply_text(
-        "Nice the following expense has been created:\n"+str(event),
-        reply_markup=markup,
-    )
-
-    return CHOOSING
-
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
     update.message.reply_text('Help!')
 
 def done(update: Update, context: CallbackContext) -> int:
     user_data = context.user_data
-    if 'choice' in user_data:
-        del user_data['choice']
 
     update.message.reply_text(
         "Bye Bye! :)"
@@ -78,10 +62,24 @@ def new_expense_choice(update: Update, context: CallbackContext) -> int:
     text = update.message.text
     context.user_data['choice'] = text
     update.message.reply_text(
-        'Type the expense NAME, PRICE, DATE (dd/mm/yyyy or leave it blank for today):'
+        'Type the expense:\n NAME, PRICE, DATE\n (dd/mm/yyyy or leave it blank for today):'
     )
 
-    return TYPING_REPLY
+    return NEW_REPLY
+
+def new_expense_reply(update: Update, context: CallbackContext) -> int:
+    text = update.message.text
+    logger.info("text:"+str(text))
+    logger.info("id:"+str(update.message.from_user.id))
+    event = myDbManager.createExpense(update.message.from_user.id,text)
+
+    update.message.reply_text(
+        "Nice the following expense has been created:\n"+str(event),
+        reply_markup=markup,
+    )
+
+    return CHOOSING
+
 
 #show to the user all the expenses
 def show_expenses_choice(update: Update, context: CallbackContext) -> int:
@@ -133,6 +131,10 @@ def delete_expense_replay(update: Update, context: CallbackContext) -> int:
         reply_markup=markup
     )
 
+    #cleare junk data
+    user_data = context.user_data
+    user_data.clear()
+
     return CHOOSING
 
 
@@ -161,6 +163,7 @@ def update_expense_choice(update: Update, context: CallbackContext) -> int:
 def update_expense_replay(update: Update, context: CallbackContext) -> int:
 
     selected = update.message.text
+
     list_expenses = context.user_data["list_expenses"]
 
     #get the object id from given a numeric id
@@ -181,6 +184,7 @@ def update_expense_replay(update: Update, context: CallbackContext) -> int:
 def update_expense_choicefild(update: Update, context: CallbackContext) -> int:
 
     selected = update.message.text
+
     context.user_data["fild_to_update"] = selected
 
     update.message.reply_text(
@@ -192,6 +196,7 @@ def update_expense_choicefild(update: Update, context: CallbackContext) -> int:
 def update_expense_modify(update: Update, context: CallbackContext) -> int:
 
     new_value_fild = update.message.text
+
     oid_selected = context.user_data["oid_selected"]
     fild_to_update= context.user_data["fild_to_update"]
 
@@ -202,6 +207,10 @@ def update_expense_modify(update: Update, context: CallbackContext) -> int:
         "The fild "+str(fild_to_update)+" has been update with: "+new_value_fild,
         reply_markup=markup
     )
+
+    #cleare junk data
+    user_data = context.user_data
+    user_data.clear()
 
     return CHOOSING
 
@@ -231,38 +240,38 @@ def main():
             ],
             DELETE_REPLY:[
                 MessageHandler(
-                    Filters.text ,
+                    Filters.text & ~(Filters.command | Filters.regex('^Done$')),
                     delete_expense_replay,
-                )
+                ),
             ],
             UPDATE_REPLY:[
                 MessageHandler(
-                    Filters.text,
+                    Filters.text & ~(Filters.command | Filters.regex('^Done$')),
                     update_expense_replay,
-                )
+                ),
             ],
             UPDATE_CHOOSING: [
                 MessageHandler(
-                    Filters.text,
+                    Filters.text & ~(Filters.command | Filters.regex('^Done$')),
                     update_expense_choicefild,
-                )
+                ),
             ],
             UPDATE_MOFIFY: [
                 MessageHandler(
-                    Filters.text,
+                    Filters.text & ~(Filters.command | Filters.regex('^Done$')),
                     update_expense_modify,
-                )
+                ),
             ],
-            TYPING_REPLY: [
+            NEW_REPLY: [
                 MessageHandler(
                     Filters.text & ~(Filters.command | Filters.regex('^Done$')),
-                    received_information,
-                )
+                    new_expense_reply,
+                ),
             ],
             TYPING_CHOICE: [
                 MessageHandler(
                     Filters.text & ~(Filters.command | Filters.regex('^Done$')), done
-                )
+                ),
             ],
 
         },
